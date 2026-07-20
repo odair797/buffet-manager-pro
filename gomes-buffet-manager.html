@@ -1877,9 +1877,10 @@ PAGES.config = () => {
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMin}" onchange="cfgIng('${i.id}','pMin',this.value)"></td>
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMed}" onchange="cfgIng('${i.id}','pMed',this.value)"></td>
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMax}" onchange="cfgIng('${i.id}','pMax',this.value)"></td>
-      <td class="right"><div class="flex" style="justify-content:flex-end">
+      <td class="right"><div class="flex" style="justify-content:flex-end;flex-wrap:wrap;gap:5px">
+        <button class="btn btn-primary btn-sm" style="padding:5px 9px" title="Puxar preços da base aberta (referência nacional, editável)" onclick="puxarPreco('${i.id}')">${icon('spark')} Puxar</button>
         <button class="btn btn-gold btn-sm" style="padding:5px 9px" title="Registrar preço pago e aplicar a média das suas compras" onclick="histPreco('${i.id}')">${icon('money')} Média${i.hist&&i.hist.length?` (${i.hist.length})`:''}</button>
-        <button class="icon-btn" style="width:30px;height:30px" title="Pesquisar preço na internet (sua região)" onclick="priceSearch('${i.id}')">${icon('search')}</button>
+        <button class="icon-btn" style="width:30px;height:30px" title="Pesquisar na internet (abre o Google Shopping da sua região)" onclick="priceSearch('${i.id}')">${icon('search')}</button>
         <button class="icon-btn" style="width:30px;height:30px" title="Excluir ingrediente" onclick="askDelIngrediente('${i.id}')">${icon('trash')}</button>
       </div></td>
     </tr>`).join('')).join('')}</tbody></table>
@@ -1950,6 +1951,64 @@ function aplicarMedia(id){
   const st=histStats(i); if(!st){ toast('Registre ao menos um preço.'); return; }
   i.pMin=st.min; i.pMed=st.med; i.pMax=st.max;
   save(); closeDrawer(); render(); toast(`${i.nome}: preços atualizados pela média das suas compras.`);
+}
+
+let PUXA={id:null, termo:'', dados:null, carregando:false};
+function termoLimpo(nome){ return nome.replace(/\(.*?\)/g,' ').replace(/[^A-Za-zÀ-ú ]/g,' ').trim().split(/\s+/).slice(0,2).join(' '); }
+function puxarPreco(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  PUXA={id, termo:termoLimpo(i.nome), dados:null, carregando:false};
+  renderPuxa(); buscarPreco();
+}
+function renderPuxa(){
+  const i=DB.ingredients.find(x=>x.id===PUXA.id); if(!i)return;
+  const d=PUXA.dados;
+  openDrawer(`
+    <div class="drawer-head"><div><h3>Puxar preços — ${esc(i.nome)}</h3><div class="muted">Base aberta de notas fiscais (referência nacional) · edite a busca e os valores</div></div><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="flex mb">
+        <input id="px_termo" value="${esc(PUXA.termo)}" placeholder="O que buscar (ex.: picanha, alcatra)" onkeydown="if(event.key==='Enter'){PUXA.termo=this.value;buscarPreco()}">
+        <button class="btn btn-primary btn-sm" onclick="PUXA.termo=document.getElementById('px_termo').value;buscarPreco()">${icon('search')} Buscar</button>
+      </div>
+      ${PUXA.carregando?'<div class="empty" style="padding:24px">Consultando a base de preços…</div>':''}
+      ${PUXA.erro?`<div class="login-err">${esc(PUXA.erro)}</div><div class="muted" style="font-size:12px">Dica: use o botão de lupa para consultar o Google Shopping da sua região, ou registre o preço pago em "Média".</div>`:''}
+      ${d&&d.precos&&d.precos.n?`
+        <div class="total-box"><div class="spread"><div><div class="tb-l">Preço médio de referência</div><div class="tb-v">${fmt(d.precos.med)}</div></div>
+          <div style="text-align:right;font-size:13px"><div>mín ${fmt(d.precos.min)}</div><div>máx ${fmt(d.precos.max)}</div><div class="muted">${d.precos.n} preços</div></div></div></div>
+        <div class="frow mt">
+          <div class="field"><label>Aplicar mín</label><input id="px_min" type="number" step="0.1" value="${d.precos.min}"></div>
+          <div class="field"><label>Médio</label><input id="px_med" type="number" step="0.1" value="${d.precos.med}"></div>
+          <div class="field"><label>Máx</label><input id="px_max" type="number" step="0.1" value="${d.precos.max}"></div>
+        </div>
+        <button class="btn btn-gold" style="width:100%;justify-content:center" onclick="aplicarPuxa()">${icon('check')} Aplicar estes valores ao ingrediente</button>
+        <div class="muted mt" style="font-size:11.5px">${esc(d.fonte)}. Os valores são de lojas do PR (referência) — ajuste acima para a sua realidade antes de aplicar.</div>
+        <div class="section-title">Amostras encontradas <span class="muted" style="text-transform:none;font-weight:400">(clique para usar o valor)</span></div>
+        ${d.amostras.map(a=>`<div class="checklist-item" style="cursor:pointer" onclick="document.getElementById('px_med').value='${a.valor}'"><span><b>${fmt(a.valor)}</b> <span class="muted">${esc(a.desc.slice(0,42))}${a.mun?' · '+esc(a.mun)+'/'+esc(a.uf):''}</span></span></div>`).join('')}
+      `:(d&&!PUXA.carregando&&!PUXA.erro?'<div class="empty" style="padding:20px">Nenhum preço encontrado para esse termo. Tente outro nome (ex.: um corte específico).</div>':'')}
+    </div>
+    <div class="drawer-foot"><button class="btn btn-ghost" onclick="closeDrawer()">Fechar</button></div>`);
+  const inp=document.getElementById('px_termo'); if(inp && !PUXA.carregando){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+}
+async function buscarPreco(){
+  if(!PUXA.termo || !PUXA.termo.trim()){ toast('Digite o que buscar.'); return; }
+  PUXA.carregando=true; PUXA.erro=''; PUXA.dados=null; renderPuxa();
+  try{
+    const r=await fetch('/api/preco?termo='+encodeURIComponent(PUXA.termo.trim()));
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||'falha na consulta');
+    PUXA.dados=j;
+  }catch(e){
+    PUXA.erro = REMOTE ? ('Não foi possível consultar agora: '+e.message) : 'A busca automática só funciona na versão online (link do Vercel). Aqui no modo local, use a lupa ou registre o preço pago.';
+  }
+  PUXA.carregando=false; renderPuxa();
+}
+function aplicarPuxa(){
+  const i=DB.ingredients.find(x=>x.id===PUXA.id); if(!i)return;
+  const g=x=>+document.getElementById(x).value||0;
+  const mn=g('px_min'), md=g('px_med'), mx=g('px_max');
+  if(!md){ toast('Informe ao menos o preço médio.'); return; }
+  i.pMin=mn||md; i.pMed=md; i.pMax=mx||md;
+  save(); closeDrawer(); render(); toast(`${i.nome}: preços aplicados da base de referência (edite quando quiser).`);
 }
 function addIngrediente(){
   const g=x=>document.getElementById(x).value;
