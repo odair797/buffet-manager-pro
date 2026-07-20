@@ -1,0 +1,9 @@
+{
+  "name": "buffet-manager-pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestão da Gomes Buffet — frontend estático + API serverless na Vercel",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.0.0"
+  }
+}

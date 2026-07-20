@@ -239,6 +239,14 @@ html.dark .signature-name{color:var(--primary-3)}
 .checklist-del:hover{color:var(--danger);background:rgba(192,57,43,.1)}
 .checklist-del svg{width:14px;height:14px}
 .checklist-add{display:flex;gap:8px;margin-top:10px}
+
+/* pré-visualizador de PDF */
+.pv-wrap{position:fixed;inset:0;background:rgba(8,16,12,.72);z-index:95;display:none;flex-direction:column;padding:18px;backdrop-filter:blur(3px)}
+.pv-wrap.open{display:flex;animation:fadein .2s ease}
+.pv-bar{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-radius:14px 14px 0 0;padding:10px 18px;gap:12px}
+.pv-bar b{font-size:14px}
+.pv-frame{flex:1;background:#4A5450;border-radius:0 0 14px 14px;overflow:auto;display:flex;justify-content:center;padding:18px}
+#pvIframe{width:820px;max-width:100%;height:100%;border:none;background:#fff;border-radius:6px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -246,6 +254,16 @@ html.dark .signature-name{color:var(--primary-3)}
 <div class="overlay" id="overlay" onclick="closeDrawer()"></div>
 <div class="drawer" id="drawer"></div>
 <div class="toast" id="toast"></div>
+<div class="pv-wrap" id="pvWrap">
+  <div class="pv-bar">
+    <b id="pvTitle">Pré-visualização</b>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-gold btn-sm" onclick="pvPrint()">⬇ Gerar PDF / Imprimir</button>
+      <button class="btn btn-ghost btn-sm" onclick="closePreview()">Fechar</button>
+    </div>
+  </div>
+  <div class="pv-frame"><iframe id="pvIframe" title="Pré-visualização do documento"></iframe></div>
+</div>
 <script>
 /* ================== LOGO OFICIAL — Gomes Buffet ==================
    Recriação fiel em SVG vetorial (círculo verde, chapéu de chef dourado,
@@ -305,6 +323,9 @@ const IC = {
   logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   userplus:'<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/>',
   shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>',
+  print:'<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  edit:'<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
 };
 const icon = (n,s)=>`<svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${s?`style="${s}"`:''}>${IC[n]}</svg>`;
 
@@ -393,6 +414,94 @@ let DB;
 try{ DB = JSON.parse(localStorage.getItem('gomesbuffet_db')) || null; }catch(e){ DB = null; }
 if(!DB){ DB = JSON.parse(JSON.stringify(SEED)); seedDemo(); }
 if(!DB.users || !DB.users.length){ DB.users = JSON.parse(JSON.stringify(SEED.users)); } // migração p/ bancos salvos antes do login existir
+/* ---- Modelo de pré-contrato (placeholders preenchidos pelo orçamento vinculado) ---- */
+const PRE_CONTRATO = `CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE BUFFET
+
+CONTRATADA: GOMES BUFFET, prestadora de serviços de alimentação para eventos.
+CONTRATANTE: {{CONTRATANTE}}, CPF/CNPJ {{CPF_CNPJ}}, telefone {{TELEFONE}}.
+
+1. DO OBJETO
+A CONTRATADA prestará serviço de buffet para o evento "{{TIPO_EVENTO}}", a realizar-se em {{DATA_EVENTO}} às {{HORARIO}}, no endereço {{LOCAL_EVENTO}}, para aproximadamente {{CONVIDADOS}} convidados, com o cardápio "{{CARDAPIO}}".
+
+2. DO VALOR E FORMA DE PAGAMENTO
+O valor total dos serviços é de {{VALOR_TOTAL}}. A reserva da data se dá mediante assinatura deste contrato e pagamento de entrada de {{SINAL}}. O restante deverá ser pago em até 3 (três) dias antes do evento. Forma de pagamento: {{FORMA_PAGAMENTO}}.
+
+3. DAS OBRIGAÇÕES DA CONTRATADA
+Fornecer os alimentos e bebidas descritos no cardápio contratado, em quantidade e qualidade adequadas; disponibilizar equipe de serviço (garçons, copeira e apoio); levar todos os utensílios necessários (pratos de porcelana, taças de vidro, talheres de inox e guardanapos).
+
+4. DAS OBRIGAÇÕES DO CONTRATANTE
+Disponibilizar o local do evento em condições adequadas, com acesso a energia elétrica e água; informar com antecedência mínima de 7 (sete) dias qualquer alteração no número de convidados.
+
+5. DO CANCELAMENTO
+Em caso de cancelamento pelo CONTRATANTE com mais de 30 dias de antecedência, será devolvido 50% da entrada. Com menos de 30 dias, a entrada não será restituída. Em caso de cancelamento pela CONTRATADA, todos os valores pagos serão integralmente devolvidos.
+
+6. DISPOSIÇÕES GERAIS
+Crianças até 4 anos não pagam; de 5 a 9 anos pagam 50%. Casos omissos serão resolvidos de comum acordo entre as partes.
+
+E por estarem de acordo, firmam o presente contrato.
+
+{{CIDADE_DATA}}`;
+
+if(!DB.cfg.empresa) DB.cfg.empresa={
+  sobre:'Gomes Buffet nasceu da nossa paixão pela gastronomia, um sonho que ganhou vida na cozinha, onde encontramos a maneira perfeita de compartilhar nosso amor pela culinária. Nosso objetivo é transformar cada evento em uma experiência inesquecível, criando momentos especiais através de sabores e emoções.',
+  nossoBuffet:'Nossos cardápios são exclusivos e personalizados, criados para atender aos desejos de quem nos escolheu, com o intuito de encantar e surpreender todos os convidados.',
+  incluso:'Equipe de garçons, copeira, fritadeira e todos os utensílios necessários. (Pratos de porcelana, taças de vidro, talheres de inox, guardanapos.)',
+  infoAdicionais:'Levamos todos os utensílios necessários para o evento;\nCrianças até 4 anos não pagam;\nCrianças de 5 a 9 pagam 50%;\nNosso orçamento é válido por 3 dias após a data do envio;\nA data será reservada em nossa agenda, mediante a assinatura do contrato e entrada de 30% do valor total;\nO restante do pagamento poderá ser realizado até 3 dias antes do evento;\nForma de pagamento: PIX ou cartão de crédito (verificar taxa).',
+  fechamento:'Será uma alegria festejar com você. Esperamos que você desfrute de uma experiência inesquecível.',
+  instagram:'@gommesbuffet',
+  telefone:'(27) 99625-4493'
+};
+if(DB.cfg.regiao==null) DB.cfg.regiao='';
+(DB.menus||[]).forEach(m=>{
+  if(!m.pratos) m.pratos=[]; // migração p/ cardápios salvos antes dos pratos existirem
+  if(!m.secoesList){ // migração p/ seções dinâmicas
+    const base=['Escolha das Carnes','Entrada','Prato Principal','Sobremesa'];
+    m.secoesList = base.map(n=>({nome:n, ativo: m.secoes ? m.secoes[n]!==false : true}));
+    [...new Set(m.pratos.map(p=>p.cat))].filter(c=>!base.includes(c)).forEach(c=>m.secoesList.push({nome:c, ativo:true}));
+  }
+  if(!m.horas) m.horas='4 horas de serviço de buffet';
+  if(!m.precos) m.precos=[];
+  if(m.fotoCapa==null) m.fotoCapa='';
+  if(m.fotosMenu==null) m.fotosMenu='';
+});
+if(!DB.contratos || !DB.contratos.length){
+  DB.contratos=[{id:'ct1', titulo:'Contrato padrão de prestação de serviços', criado:todayISO(), texto:PRE_CONTRATO}];
+}
+/* Cardápio-modelo "Roda de Boteco" (reproduz a proposta oficial da Gomes Buffet) */
+if(!DB.menus.some(m=>/roda de boteco/i.test(m.nome))){
+  DB.menus.push({
+    id:'rodaboteco', nome:'Roda de Boteco', itens:['linguica','frango','feijao','arroz','farofa','salada','refri','agua','suco','gas','gelo','descart','temperos','sobremesa'],
+    horas:'4 horas de serviço de buffet',
+    precos:[
+      {faixa:'De 15 a 29 Adultos', valor:155},{faixa:'De 30 a 49 Adultos', valor:150},{faixa:'De 50 a 74 Adultos', valor:135},
+      {faixa:'De 75 a 99 Adultos', valor:125},{faixa:'Acima de 100 Adultos', valor:115},
+    ],
+    secoesList:[
+      {nome:'Cardápio roda de boteco', ativo:true},
+      {nome:'Caldo especial', ativo:true},
+      {nome:'Prato principal', ativo:true},
+      {nome:'Sobremesa', ativo:true},
+      {nome:'Bebidas', ativo:true},
+    ],
+    pratos:[
+      {cat:'Cardápio roda de boteco', nome:'Bolinho de linguiça', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Bolinho de carne seca com aipim', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Bolinho de banana com costela', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Pastelzinho de vento', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Torresmo crocante', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Calabresa acebolada', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Costelinha acebolada', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Frango a passarinho', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Batata frita', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Giló', desc:''},
+      {cat:'Cardápio roda de boteco', nome:'Aipim frito', desc:''},
+      {cat:'Caldo especial', nome:'Escolha 1 opção', desc:'Caldo verde, Péla Égua, Caldo de aipim, Caldo de feijão'},
+      {cat:'Prato principal', nome:'Feijoada completa', desc:'acompanhada de arroz branco, couve refogada, farofa temperada, laranja em rodelas, banana cozida'},
+      {cat:'Sobremesa', nome:'Doces de compota, cocadinha, paçoca, doce de leite', desc:''},
+      {cat:'Bebidas', nome:'Refrigerante, água e suco', desc:''},
+    ],
+  });
+}
 function save(){ try{ localStorage.setItem('gomesbuffet_db', JSON.stringify(DB)); }catch(e){} }
 
 /* ================== SESSÃO / LOGIN ================== */
@@ -495,6 +604,7 @@ const ROUTES = [
   {sec:'Comercial'},
   {id:'orcamentos', nome:'Orçamentos', ic:'doc', badge:()=>DB.budgets.filter(b=>b.status==='pendente'||b.status==='rascunho').length||''},
   {id:'clientes', nome:'Clientes', ic:'users'},
+  {id:'contratos', nome:'Contratos', ic:'edit'},
   {id:'eventos', nome:'Eventos', ic:'party'},
   {sec:'Operação'},
   {id:'financeiro', nome:'Financeiro', ic:'money'},
@@ -509,10 +619,11 @@ const ROUTES = [
 let route = 'dashboard';
 let cadastroOpen = false;
 let userMenuOpen = false;
-function go(r){ route=r; cadastroOpen=false; userMenuOpen=false; closeDrawer(); render(); }
+let acctMsg = '';
+function go(r){ route=r; cadastroOpen=false; userMenuOpen=false; acctMsg=''; closeDrawer(); render(); }
 function quickNew(target){
   cadastroOpen=false; go(target);
-  ({orcamentos:()=>startWizard(), clientes:clientForm, equipe:teamForm, cardapios:menuForm, alugueis:rentalForm, financeiro:finForm, usuarios:userForm}[target])();
+  ({orcamentos:()=>startWizard(), clientes:clientForm, equipe:teamForm, cardapios:menuForm, alugueis:rentalForm, financeiro:finForm, usuarios:userForm, contratos:()=>contratoForm()}[target])();
 }
 document.addEventListener('click', e=>{
   if(cadastroOpen && !e.target.closest('.cadastro-wrap')){ cadastroOpen=false; render(); }
@@ -544,6 +655,7 @@ function render(){
             <button class="cadastro-item" onclick="quickNew('clientes')">${icon('users')} Novo cliente</button>
             <button class="cadastro-item" onclick="quickNew('equipe')">${icon('chef')} Novo funcionário</button>
             <button class="cadastro-item" onclick="quickNew('cardapios')">${icon('menu')} Novo cardápio</button>
+            <button class="cadastro-item" onclick="quickNew('contratos')">${icon('edit')} Novo contrato</button>
             <button class="cadastro-item" onclick="quickNew('alugueis')">${icon('box')} Novo item de aluguel</button>
             <button class="cadastro-item" onclick="quickNew('financeiro')">${icon('money')} Novo lançamento financeiro</button>
             ${isAdmin()?`<div class="cadastro-sep"></div><button class="cadastro-item" onclick="quickNew('usuarios')">${icon('userplus')} Novo usuário</button>`:''}
@@ -661,6 +773,19 @@ function closeDrawer(){ document.getElementById('drawer').classList.remove('open
 let toastT;
 function toast(msg){ const t=document.getElementById('toast'); t.innerHTML=icon('check')+esc(msg); t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),3400); }
 
+/* pré-visualizador de documentos (proposta/contrato) */
+function openPreview(html, titulo){
+  document.getElementById('pvTitle').textContent=titulo||'Pré-visualização';
+  document.getElementById('pvIframe').setAttribute('srcdoc', html);
+  document.getElementById('pvWrap').classList.add('open');
+}
+function closePreview(){ document.getElementById('pvWrap').classList.remove('open'); }
+function pvPrint(){
+  const fr=document.getElementById('pvIframe');
+  try{ fr.contentWindow.focus(); fr.contentWindow.print(); }
+  catch(e){ toast('Não foi possível abrir a impressão. Tente pelo navegador (Ctrl+P).'); }
+}
+
 const PAGES = {};
 </script>
 <script>
@@ -694,7 +819,7 @@ PAGES.orcamentos = () => {
 
 function startWizard(b){
   W = b ? {step:1, b:JSON.parse(JSON.stringify(b)), edit:true}
-        : {step:1, b:makeBudget({clienteId:DB.clients[0].id, tipo:'Aniversário', pessoas:50, local:'', data:todayISO(), hora:'12:00', menuId:'churrasco', pagamento:'50% sinal + 50% no evento', validade:'', obs:'', equipe:[], alugueis:[], margem:DB.cfg.margemPadrao})};
+        : {step:1, b:makeBudget({clienteId:DB.clients[0].id, tipo:'Aniversário', pessoas:50, local:'', data:todayISO(), hora:'12:00', menuId:'churrasco', contratoId:DB.contratos[0]?DB.contratos[0].id:'', pagamento:'50% sinal + 50% no evento', validade:'', obs:'', equipe:[], alugueis:[], margem:DB.cfg.margemPadrao})};
   render();
 }
 function wStep(n){
@@ -711,7 +836,7 @@ function syncStep1(){
   const b=W.b, oldMenu=b.menuId, oldP=b.pessoas;
   b.clienteId=g('w_cli').value; b.tipo=g('w_tipo').value; b.pessoas=+g('w_pess').value||1;
   b.data=g('w_data').value||todayISO(); b.hora=g('w_hora').value||'12:00'; b.local=g('w_local').value.trim();
-  b.menuId=g('w_menu').value; b.pagamento=g('w_pag').value; b.validade=g('w_val').value; b.obs=g('w_obs').value;
+  b.menuId=g('w_menu').value; b.contratoId=g('w_contrato')?g('w_contrato').value:b.contratoId; b.pagamento=g('w_pag').value; b.validade=g('w_val').value; b.obs=g('w_obs').value;
   if(b.menuId!==oldMenu){ const m=DB.menus.find(x=>x.id===b.menuId); b.itens=m?m.itens.map(i=>({ing:i})):[]; }
   else if(b.pessoas!==oldP){ b.itens=b.itens.map(l=>({ing:l.ing, preco:l.preco})); } // recalcula qtds
 }
@@ -734,9 +859,13 @@ function wizardView(){
       </div>
       <div class="field"><label>Local do evento</label><input id="w_local" value="${esc(b.local)}" placeholder="Endereço completo"></div>
       <div class="frow3">
-        <div class="field"><label>Cardápio</label><select id="w_menu">${DB.menus.map(m=>`<option value="${m.id}" ${m.id===b.menuId?'selected':''}>${esc(m.nome)}</option>`).join('')}</select></div>
+        <div class="field"><label>Cardápio vinculado</label><select id="w_menu">${DB.menus.map(m=>`<option value="${m.id}" ${m.id===b.menuId?'selected':''}>${esc(m.nome)}</option>`).join('')}</select></div>
+        <div class="field"><label>Contrato vinculado</label><select id="w_contrato"><option value="">— Sem contrato —</option>${DB.contratos.map(ct=>`<option value="${ct.id}" ${ct.id===b.contratoId?'selected':''}>${esc(ct.titulo)}</option>`).join('')}</select></div>
         <div class="field"><label>Forma de pagamento</label><input id="w_pag" value="${esc(b.pagamento)}"></div>
+      </div>
+      <div class="frow">
         <div class="field"><label>Validade da proposta</label><input id="w_val" type="date" value="${b.validade||''}"></div>
+        <div></div>
       </div>
       <div class="field"><label>Observações</label><textarea id="w_obs" rows="2">${esc(b.obs||'')}</textarea></div>
     </div>`;
@@ -793,6 +922,7 @@ function wizardView(){
         <div class="sumrow"><span>Data</span><b>${fmtD(b.data)} às ${b.hora}</b></div>
         <div class="sumrow"><span>Local</span><b style="text-align:right;max-width:60%">${esc(b.local)}</b></div>
         <div class="sumrow"><span>Cardápio</span><b>${esc(DB.menus.find(m=>m.id===b.menuId)?.nome||'')}</b></div>
+        <div class="sumrow"><span>Contrato</span><b>${esc(DB.contratos.find(ct=>ct.id===b.contratoId)?.titulo||'Sem contrato')}</b></div>
         <div class="sumrow"><span>Pagamento</span><b>${esc(b.pagamento)}</b></div>
         <div class="sumrow"><span>Elaborado por</span><b>${esc(b.criadoPor?b.criadoPor.nome:(SESSION?SESSION.nome:'—'))}</b></div>
         <div class="section-title">Composição de custos</div>
@@ -869,8 +999,13 @@ function openBudget(id){
       <div class="sumrow"><span>Local</span><b style="text-align:right;max-width:60%">${esc(b.local)}</b></div>
       <div class="sumrow"><span>Convidados</span><b>${b.pessoas}</b></div>
       <div class="sumrow"><span>Cardápio</span><b>${esc(DB.menus.find(m=>m.id===b.menuId)?.nome||'')}</b></div>
+      <div class="sumrow"><span>Contrato</span><b>${esc(DB.contratos.find(ct=>ct.id===b.contratoId)?.titulo||'Sem contrato')}</b></div>
       <div class="sumrow"><span>Pagamento</span><b>${esc(b.pagamento)}</b></div>
       ${b.validade?`<div class="sumrow"><span>Validade</span><b>${fmtD(b.validade)}</b></div>`:''}
+      <div class="flex mt" style="flex-wrap:wrap">
+        <button class="btn btn-gold btn-sm" onclick="printMenu('${b.menuId}')">${icon('print')} Proposta PDF</button>
+        ${b.contratoId?`<button class="btn btn-gold btn-sm" onclick="printContrato('${b.contratoId}','${b.id}')">${icon('print')} Contrato PDF</button>`:''}
+      </div>
       <div class="section-title">Financeiro</div>
       <div class="sumrow"><span>Custo total</span><b style="color:var(--danger)">${fmt(c.custoTotal)}</b></div>
       <div class="sumrow"><span>Valor da proposta</span><b>${fmt(c.preco)}</b></div>
@@ -981,7 +1116,7 @@ PAGES.agenda = () => {
       const d=new Date(start); d.setDate(start.getDate()+i);
       const iso=isoLocal(d);
       const evd=DB.events.filter(e=>e.data===iso&&e.status!=='cancelado');
-      cells+=`<div class="cal-cell ${d.getMonth()!==m?'other':''} ${iso===todayISO()?'today':''}">
+      cells+=`<div class="cal-cell ${d.getMonth()!==m?'other':''} ${iso===todayISO()?'today':''}" onclick="budgetFromDate('${iso}')" title="Clique para criar um orçamento em ${fmtD(iso)}">
         <span class="cal-num">${d.getDate()}</span>
         ${evd.map(e=>`<div class="cal-ev ${e.status==='realizado'?'gray':''}" onclick="event.stopPropagation();openEvent('${e.id}')" title="${esc(e.titulo)}">${e.hora} ${esc(e.titulo)}</div>`).join('')}
       </div>`;
@@ -1010,28 +1145,40 @@ PAGES.agenda = () => {
   </div>${body}`;
 };
 
+/* novo orçamento a partir de um clique no dia do calendário */
+function budgetFromDate(iso){
+  go('orcamentos');
+  startWizard();
+  W.b.data = iso;
+  render();
+  toast('Novo orçamento para '+fmtD(iso)+' — preencha os dados.');
+}
+
 /* ================== EVENTO (drawer compartilhado) ================== */
 function openEvent(id){
   const e=DB.events.find(x=>x.id===id); if(!e) return;
   const cli=DB.clients.find(x=>x.id===e.clienteId);
   const b=DB.budgets.find(x=>x.id===e.budgetId);
   const c=b?calcBudget(b):null;
+  const tipoBuffet = b ? (DB.menus.find(m=>m.id===b.menuId)?.nome || '—') : '—';
   const fin=DB.finance.filter(f=>f.budgetId===e.budgetId&&f.tipo==='receita');
   const done=e.checklist.filter(x=>x.ok).length;
   openDrawer(`
     <div class="drawer-head"><div><h3>${esc(e.titulo)}</h3><div class="muted">${fmtD(e.data)} às ${e.hora}</div></div><button class="close-x" onclick="closeDrawer()">✕</button></div>
     <div class="drawer-body">
       <span class="badge ${e.status==='realizado'?'b-gray':'b-green'}">${e.status}</span>
-      <div class="section-title">Cliente</div>
-      <div class="sumrow"><span>Nome</span><b>${esc(cli?cli.nome:'—')}</b></div>
+      <div class="section-title">Evento</div>
+      <div class="sumrow"><span>Nome do evento</span><b style="text-align:right;max-width:60%">${esc(e.titulo)}</b></div>
+      <div class="sumrow"><span>Endereço</span><b style="text-align:right;max-width:60%">${esc(e.local)}</b></div>
       <div class="sumrow"><span>Telefone</span><b>${esc(cli?cli.tel:'—')}</b></div>
-      <div class="sumrow"><span>Local</span><b style="text-align:right;max-width:60%">${esc(e.local)}</b></div>
+      <div class="sumrow"><span>Contratante</span><b>${esc(cli?cli.nome:'—')}</b></div>
+      <div class="sumrow"><span>Tipo de buffet</span><b>${esc(tipoBuffet)}</b></div>
       <div class="sumrow"><span>Convidados</span><b>${e.pessoas}</b></div>
       <div class="section-title">Equipe escalada (${e.equipe.length})</div>
       ${e.equipe.map(id=>{const t=DB.team.find(x=>x.id===id);return t?`<div class="sumrow"><span class="flex"><span class="avatar-sm">${initials(t.nome)}</span>${esc(t.nome)}</span><b class="muted">${esc(t.funcao)} · ${fmt(t.diaria)}</b></div>`:''}).join('')||'<div class="muted">Nenhum funcionário escalado.</div>'}
       ${e.alugueis&&e.alugueis.length?`<div class="section-title">Equipamentos reservados</div>${e.alugueis.map(a=>{const r=DB.rentals.find(x=>x.id===a.id);return r?`<div class="sumrow"><span>${esc(r.item)}</span><b>${a.qtd} ${r.un} · ${fmt(r.ultimo*a.qtd)}</b></div>`:''}).join('')}`:''}
       ${c?`<div class="section-title">Financeiro</div>
-      <div class="sumrow"><span>Valor do contrato</span><b>${fmt(c.preco)}</b></div>
+      <div class="sumrow"><span>Valor do orçamento confirmado</span><b>${fmt(c.preco)}</b></div>
       ${fin.map(f=>`<div class="sumrow"><span>${esc(f.desc.split('—')[0])}</span><b style="color:${f.status==='recebido'?'var(--success)':f.venc<todayISO()?'var(--danger)':'var(--warn)'}">${fmt(f.valor)} · ${f.status==='recebido'?'recebido':f.venc<todayISO()?'atrasado':'a receber'}</b></div>`).join('')}
       <div class="sumrow"><span>Lucro estimado</span><b style="color:var(--success)">${fmt(c.lucro)} (${fmtN(c.margemReal,0)}%)</b></div>`:''}
       <div class="section-title">Checklist operacional</div>
@@ -1312,8 +1459,13 @@ PAGES.cardapios = () => `
       <div class="spread"><b style="font-size:15.5px">${esc(m.nome)}</b>${usados?`<span class="badge b-blue">${usados} orçamento(s)</span>`:''}</div>
       <div class="muted mt" style="font-size:12.5px">${m.itens.length} ingrediente(s) · ${cats.join(', ')||'—'}</div>
       <div class="mt" style="display:flex;flex-wrap:wrap;gap:6px">${m.itens.slice(0,6).map(i=>{const ing=DB.ingredients.find(x=>x.id===i);return ing?`<span class="chip" style="cursor:default;padding:3px 9px;font-size:11.5px">${esc(ing.nome)}</span>`:'';}).join('')}${m.itens.length>6?`<span class="chip" style="cursor:default;padding:3px 9px;font-size:11.5px">+${m.itens.length-6}</span>`:''}</div>
-      <div class="flex mt"><button class="btn btn-ghost btn-sm" onclick="menuForm('${m.id}')">Editar</button>
-      <button class="btn btn-danger btn-sm" onclick="askDelMenu('${m.id}')">${icon('trash')} Excluir</button></div>
+      <div class="muted mt" style="font-size:12px">🍽️ ${(m.pratos||[]).length} item(ns) no cardápio · ${(m.secoesList||[]).filter(s=>s.ativo).length} tópico(s) ativo(s) · ${(m.precos||[]).length} faixa(s) de preço</div>
+      <div class="flex mt" style="flex-wrap:wrap">
+        <button class="btn btn-primary btn-sm" onclick="dishForm('${m.id}')">${icon('edit')} Montar cardápio</button>
+        <button class="btn btn-gold btn-sm" onclick="printMenu('${m.id}')">${icon('print')} Gerar proposta PDF</button>
+        <button class="btn btn-ghost btn-sm" onclick="menuForm('${m.id}')">Ingredientes</button>
+        <button class="btn btn-danger btn-sm" onclick="askDelMenu('${m.id}')">${icon('trash')} Excluir</button>
+      </div>
     </div>`}).join('')||`<div class="empty" style="grid-column:1/-1"><div class="e-ico">🍽️</div>Nenhum cardápio cadastrado.</div>`}
   </div>`;
 function menuForm(id){
@@ -1337,7 +1489,8 @@ function saveMenu(id){
   const itens=[...document.querySelectorAll('.mf-ing:checked')].map(el=>el.value);
   if(!itens.length){ toast('Selecione ao menos um ingrediente.'); return; }
   if(id){ const m=DB.menus.find(x=>x.id===id); m.nome=nome; m.itens=itens; }
-  else DB.menus.push({id:uid(), nome, itens});
+  else DB.menus.push({id:uid(), nome, itens, pratos:[], horas:'4 horas de serviço de buffet', precos:[],
+    secoesList:[{nome:'Escolha das Carnes',ativo:true},{nome:'Entrada',ativo:true},{nome:'Prato Principal',ativo:true},{nome:'Sobremesa',ativo:true}]});
   save(); closeDrawer(); render(); toast('Cardápio salvo.');
 }
 function askDelMenu(id){
@@ -1348,6 +1501,309 @@ function askDelMenu(id){
   });
 }
 
+/* ================== MONTAGEM DO CARDÁPIO (seções dinâmicas com flag incluir/excluir) ================== */
+function dishForm(id){
+  const m=DB.menus.find(x=>x.id===id); if(!m)return;
+  if(!m.pratos) m.pratos=[];
+  if(!m.secoesList) m.secoesList=[{nome:'Escolha das Carnes',ativo:true},{nome:'Entrada',ativo:true},{nome:'Prato Principal',ativo:true},{nome:'Sobremesa',ativo:true}];
+  openDrawer(`
+    <div class="drawer-head"><div><h3>Montar cardápio</h3><div class="muted">Título geral: ${esc(m.nome)}</div></div><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="muted mb" style="font-size:12.5px">Marque ✓ os tópicos que esse cardápio vai ter e inclua o que entra em cada um. Só os tópicos marcados saem na proposta em PDF. Tudo fica salvo automaticamente.</div>
+      ${m.secoesList.map((sec,si)=>{
+        const lista=m.pratos.map((p,i)=>({...p,i})).filter(p=>p.cat===sec.nome);
+        return `
+        <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;${sec.ativo?'':'opacity:.55'}">
+          <div class="spread">
+            <label style="display:flex;align-items:center;gap:9px;cursor:pointer;text-transform:none;letter-spacing:0;margin:0">
+              <input type="checkbox" ${sec.ativo?'checked':''} onchange="toggleSecao('${m.id}',${si})" style="width:17px;height:17px;accent-color:var(--primary-2)">
+              <b style="font-size:13.5px;color:var(--primary)">${esc(sec.nome)}</b>
+            </label>
+            <button class="checklist-del" title="Excluir tópico" onclick="removeSecao('${m.id}',${si})">${icon('trash')}</button>
+          </div>
+          ${sec.ativo?`
+          <div class="mt">
+            ${lista.length?lista.map(p=>`<div class="checklist-item"><span><b>${esc(p.nome)}</b>${p.desc?` — <span class="muted">${esc(p.desc)}</span>`:''}</span><button class="checklist-del" title="Excluir" onclick="removeDish('${m.id}',${p.i})">${icon('trash')}</button></div>`).join('')
+              :'<div class="muted" style="font-size:12.5px;padding:2px 0">Nada incluso ainda neste tópico.</div>'}
+            <div class="frow mt">
+              <input id="nd_nome_${si}" placeholder="Ex.: ${sec.nome==='Escolha das Carnes'?'Picanha':sec.nome==='Sobremesa'?'Pudim de leite':'Bolinho de linguiça'}" onkeydown="if(event.key==='Enter')addDish('${m.id}',${si})">
+              <input id="nd_desc_${si}" placeholder="Descrição (opcional)" onkeydown="if(event.key==='Enter')addDish('${m.id}',${si})">
+            </div>
+            <button class="btn btn-ghost btn-sm mt" onclick="addDish('${m.id}',${si})">${icon('plus')} Incluir</button>
+          </div>`:''}
+        </div>`;
+      }).join('')}
+      <div class="flex mt">
+        <input id="novaSecao" placeholder="Novo tópico (ex.: Bebidas, Caldo especial…)" onkeydown="if(event.key==='Enter')addSecao('${m.id}')">
+        <button class="btn btn-ghost btn-sm" onclick="addSecao('${m.id}')">${icon('plus')} Criar tópico</button>
+      </div>
+      <div class="section-title">Investimento (tabela de preços da proposta)</div>
+      <div class="field"><label>Descrição do serviço</label><input value="${esc(m.horas||'')}" onchange="cfgMenu('${m.id}','horas',this.value)" placeholder="Ex.: 4 horas de serviço de buffet"></div>
+      ${(m.precos||[]).map((p,pi)=>`<div class="checklist-item"><span><b>${esc(p.faixa)}</b> — <span class="muted">${fmt(p.valor)} por pessoa</span></span><button class="checklist-del" onclick="removePreco('${m.id}',${pi})">${icon('trash')}</button></div>`).join('')||'<div class="muted" style="font-size:12.5px">Nenhuma faixa cadastrada. Ex.: "De 15 a 29 adultos" — R$ 155.</div>'}
+      <div class="frow mt">
+        <input id="np_faixa" placeholder="Faixa (ex.: De 15 a 29 Adultos)">
+        <input id="np_valor" type="number" min="0" step="5" placeholder="Valor por pessoa (R$)">
+      </div>
+      <button class="btn btn-ghost btn-sm mt" onclick="addPreco('${m.id}')">${icon('plus')} Incluir faixa de preço</button>
+      <div class="section-title">Fotos da proposta (opcional)</div>
+      <div class="muted mb" style="font-size:12px">Cole o endereço (URL) de fotos suas hospedadas na internet — ex.: do Instagram ou Google Fotos. Se deixar em branco, a proposta sai sem fotos, no mesmo layout.</div>
+      <div class="field"><label>Foto da capa (URL)</label><input value="${esc(m.fotoCapa||'')}" onchange="cfgMenu('${m.id}','fotoCapa',this.value.trim())" placeholder="https://…"></div>
+      <div class="field"><label>Fotos do menu — até 3 URLs separadas por vírgula</label><input value="${esc(m.fotosMenu||'')}" onchange="cfgMenu('${m.id}','fotosMenu',this.value)" placeholder="https://…, https://…, https://…"></div>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-gold" onclick="printMenu('${m.id}')">${icon('print')} Pré-visualizar proposta</button></div>`);
+}
+function toggleSecao(menuId, si){ const m=DB.menus.find(x=>x.id===menuId); if(!m)return; m.secoesList[si].ativo=!m.secoesList[si].ativo; save(); dishForm(menuId); }
+function addSecao(menuId){
+  const m=DB.menus.find(x=>x.id===menuId); if(!m)return;
+  const nome=document.getElementById('novaSecao').value.trim();
+  if(!nome){ toast('Digite o nome do tópico.'); return; }
+  if(m.secoesList.some(s=>s.nome.toLowerCase()===nome.toLowerCase())){ toast('Esse tópico já existe.'); return; }
+  m.secoesList.push({nome, ativo:true}); save(); dishForm(menuId);
+}
+function removeSecao(menuId, si){
+  const m=DB.menus.find(x=>x.id===menuId); if(!m)return;
+  const sec=m.secoesList[si];
+  m.pratos=m.pratos.filter(p=>p.cat!==sec.nome);
+  m.secoesList.splice(si,1); save(); dishForm(menuId); toast(`Tópico "${sec.nome}" excluído.`);
+}
+function addDish(menuId, si){
+  const m=DB.menus.find(x=>x.id===menuId); if(!m)return;
+  const sec=m.secoesList[si]; if(!sec)return;
+  const nome=document.getElementById('nd_nome_'+si).value.trim();
+  const desc=document.getElementById('nd_desc_'+si).value.trim();
+  if(!nome){ toast('Digite o nome do item.'); return; }
+  m.pratos.push({cat:sec.nome, nome, desc});
+  save(); dishForm(menuId);
+}
+function removeDish(menuId, idx){ const m=DB.menus.find(x=>x.id===menuId); if(!m)return; m.pratos.splice(idx,1); save(); dishForm(menuId); }
+function cfgMenu(menuId, campo, val){ const m=DB.menus.find(x=>x.id===menuId); if(!m)return; m[campo]=val; save(); toast('Salvo.'); }
+function addPreco(menuId){
+  const m=DB.menus.find(x=>x.id===menuId); if(!m)return;
+  const faixa=document.getElementById('np_faixa').value.trim(), valor=+document.getElementById('np_valor').value;
+  if(!faixa||!valor){ toast('Informe a faixa e o valor.'); return; }
+  m.precos.push({faixa, valor}); save(); dishForm(menuId);
+}
+function removePreco(menuId, pi){ const m=DB.menus.find(x=>x.id===menuId); if(!m)return; m.precos.splice(pi,1); save(); dishForm(menuId); }
+
+/* ================== PROPOSTA EM PDF (padrão visual Gomes Buffet — capa, sobre, menu, investimento, infos, contato) ================== */
+const BRAND_MARK = `<div class="gb-pill"><span class="gb-p1">Gomes</span><span class="gb-p2">Buffet</span></div>`;
+function printMenu(id){
+  const m=DB.menus.find(x=>x.id===id); if(!m)return;
+  const emp=DB.cfg.empresa||{};
+  const secoesAtivas=(m.secoesList||[]).filter(s=>s.ativo);
+  const infoLinhas=(emp.infoAdicionais||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const docHtml = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Proposta ${esc(m.nome)} · Gomes Buffet</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Marcellus&family=Italianno&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4;margin:0}
+    body{font-family:'Poppins',sans-serif;background:#fff}
+    .page{width:210mm;height:296mm;padding:11mm;position:relative;page-break-after:always;overflow:hidden}
+    .page:last-child{page-break-after:auto}
+    .pg-green{background:#8A9A82}
+    .pg-white{background:#fff}
+    .frame{border:1.6px solid #fff;border-radius:34px;height:100%;padding:16mm 14mm;display:flex;flex-direction:column;align-items:center;color:#fff}
+    .pg-white .frame{border-color:#9AA893;color:#3A463A}
+    .gb-pill{position:absolute;bottom:6mm;left:50%;transform:translateX(-50%);background:inherit;border:1.6px solid;border-radius:50px;padding:8px 30px;text-align:center;line-height:1.05}
+    .pg-green .gb-pill{border-color:#fff;background:#8A9A82;color:#fff}
+    .pg-white .gb-pill{border-color:#9AA893;background:#fff;color:#4A564A}
+    .gb-p1{display:block;font-family:'Marcellus',serif;font-size:19px;letter-spacing:1px}
+    .gb-p2{display:block;font-family:'Italianno',cursive;font-size:26px;margin-top:-6px}
+    .orn{display:flex;align-items:center;gap:8px;margin-bottom:2mm}
+    .orn svg{width:120px;height:26px}
+    .orn span{font-family:'Marcellus',serif;font-size:30px;letter-spacing:3px;white-space:nowrap}
+    .capa-sub{font-size:15px;letter-spacing:4px;text-transform:uppercase;margin-top:1mm}
+    .capa-bemvindo{font-size:27px;letter-spacing:3px;margin-top:18mm;font-weight:300}
+    .capa-foto{width:88%;max-height:96mm;object-fit:cover;border-radius:4px;margin-top:12mm}
+    .wordmark{margin-top:auto;margin-bottom:20mm;text-align:center;line-height:.9}
+    .wordmark .wm1{display:block;font-family:'Marcellus',serif;font-size:52px;letter-spacing:2px}
+    .wordmark .wm2{display:block;font-family:'Italianno',cursive;font-size:64px;margin-top:-6px}
+    .fotos-menu{display:flex;gap:6mm;justify-content:center;margin-bottom:8mm}
+    .fotos-menu img{width:44mm;height:56mm;object-fit:cover;border-radius:22mm 22mm 22mm 22mm / 26mm 26mm 26mm 26mm}
+    h1.serif{font-family:'Marcellus',serif;font-size:34px;font-weight:400;margin-bottom:10mm}
+    .box{border:1.4px solid #9AA893;border-radius:26px;padding:12mm 10mm;width:100%;text-align:center;margin-bottom:10mm}
+    .box h2{font-family:'Marcellus',serif;font-size:26px;font-weight:400;margin-bottom:6mm}
+    .box p{font-size:13.5px;line-height:1.75;color:#4A564A}
+    .menu-sec{width:100%;text-align:center;margin-bottom:7mm}
+    .menu-sec h3{font-size:14.5px;font-weight:600;color:#2E3B2E;margin-bottom:2.5mm}
+    .menu-sec .it{font-size:13px;color:#3A463A;line-height:1.65}
+    .menu-sec .it i{color:#75816F;font-size:11.5px}
+    .inv-hora{font-size:14.5px;font-weight:600;margin:8mm 0 9mm;color:#2E3B2E}
+    .inv-l{font-size:13.5px;color:#3A463A;line-height:2.15}
+    .inv-inc{margin-top:12mm;font-size:13px;color:#3A463A;line-height:1.7}
+    .inv-inc b{color:#2E3B2E}
+    .info-li{font-size:13px;color:#3A463A;line-height:1.7;text-align:left;margin-bottom:4mm;padding-left:14px;position:relative}
+    .info-li::before{content:'•';position:absolute;left:0;color:#8A9A82}
+    .fech{font-family:'Marcellus',serif;font-size:30px;line-height:1.5;text-align:center;margin-top:24mm;font-weight:400}
+    .disp{margin-top:auto;margin-bottom:30mm;text-align:center}
+    .disp .d1{font-size:14px;letter-spacing:2px;margin-bottom:9mm}
+    .disp .d2{font-size:14.5px;line-height:1.9}
+  </style></head>
+  <body>
+
+    <!-- CAPA (fiel ao modelo: ramos + PROPOSTA + bem-vindo + foto + marca) -->
+    <div class="page pg-green"><div class="frame">
+      <div class="orn">
+        <svg viewBox="0 0 120 26" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="13" x2="116" y2="13"/><path d="M18 13l7-6M18 13l7 6M36 13l7-6M36 13l7 6M54 13l7-6M54 13l7 6"/><path d="M104 13l-8-5M104 13l-8 5"/></svg>
+        <span>PROPOSTA</span>
+        <svg viewBox="0 0 120 26" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><line x1="4" y1="13" x2="116" y2="13"/><path d="M102 13l-7-6M102 13l-7 6M84 13l-7-6M84 13l-7 6M66 13l-7-6M66 13l-7 6"/><path d="M16 13l8-5M16 13l8 5"/></svg>
+      </div>
+      <div class="capa-sub">${esc(m.nome)}</div>
+      <div class="capa-bemvindo">SEJA BEM-VINDO À</div>
+      ${m.fotoCapa?`<img class="capa-foto" src="${esc(m.fotoCapa)}" alt="">`:''}
+      <div class="wordmark"><span class="wm1">Gomes</span><span class="wm2">Buffet</span></div>
+    </div></div>
+
+    <!-- SOBRE NÓS -->
+    <div class="page pg-white"><div class="frame">
+      <div class="box"><h2>Sobre nós</h2><p>${esc(emp.sobre||'')}</p></div>
+      <div class="box"><h2>Nosso Buffet</h2><p>${esc(emp.nossoBuffet||'')}</p></div>
+      ${BRAND_MARK}
+    </div></div>
+
+    <!-- MENU -->
+    <div class="page pg-white"><div class="frame">
+      <h1 class="serif">Menu ${esc(m.nome.toLowerCase())}</h1>
+      ${m.fotosMenu?`<div class="fotos-menu">${m.fotosMenu.split(',').map(u=>u.trim()).filter(Boolean).slice(0,3).map(u=>`<img src="${esc(u)}" alt="">`).join('')}</div>`:''}
+      ${secoesAtivas.map(sec=>{
+        const itens=(m.pratos||[]).filter(p=>p.cat===sec.nome);
+        if(!itens.length) return '';
+        return `<div class="menu-sec"><h3>${esc(sec.nome)}:</h3>${itens.map(p=>`<div class="it">${esc(p.nome)}${p.desc?` <i>(${esc(p.desc)})</i>`:''}</div>`).join('')}</div>`;
+      }).join('')}
+      ${BRAND_MARK}
+    </div></div>
+
+    ${(m.precos&&m.precos.length)?`
+    <!-- INVESTIMENTO -->
+    <div class="page pg-white"><div class="frame">
+      <h1 class="serif">Investimento</h1>
+      <div class="inv-hora">${esc(m.horas||'')}</div>
+      <div class="inv-l">${m.precos.map(p=>`${esc(p.faixa)} - ${fmt(p.valor)}`).join('<br>')}</div>
+      <div class="inv-inc"><b>Incluso</b>: ${esc(emp.incluso||'')}</div>
+      ${BRAND_MARK}
+    </div></div>`:''}
+
+    <!-- INFORMAÇÕES ADICIONAIS -->
+    <div class="page pg-white"><div class="frame">
+      <h1 class="serif">Informações adicionais</h1>
+      <div style="width:100%">${infoLinhas.map(l=>`<div class="info-li">${esc(l)}</div>`).join('')}</div>
+      ${BRAND_MARK}
+    </div></div>
+
+    <!-- CONTATO -->
+    <div class="page pg-green"><div class="frame">
+      <div class="fech">${esc(emp.fechamento||'')}</div>
+      <div class="disp">
+        <div class="d1">ESTAMOS DISPONÍVEIS:</div>
+        <div class="d2">${esc(emp.instagram||'')}<br>${esc(emp.telefone||'')}</div>
+      </div>
+      ${BRAND_MARK}
+    </div></div>
+
+  </body></html>`;
+  openPreview(docHtml, 'Proposta — '+m.nome);
+}
+
+/* ================== CONTRATOS (pré-contrato editável + geração em PDF) ================== */
+PAGES.contratos = () => `
+  <div class="spread mb"><div class="muted">Modelos de contrato com campos automáticos — {{CONTRATANTE}}, {{VALOR_TOTAL}}, {{DATA_EVENTO}} etc. são preenchidos pelos dados do orçamento na hora de gerar o PDF.</div>
+  <button class="btn btn-primary" onclick="contratoForm()">${icon('plus')} Novo contrato</button></div>
+  <div class="grid g2">${DB.contratos.map(ct=>`
+    <div class="card card-pad">
+      <div class="spread"><b style="font-size:15px">${esc(ct.titulo)}</b><span class="muted" style="font-size:11.5px">criado em ${fmtD(ct.criado)}</span></div>
+      <div class="muted mt" style="font-size:12.5px;max-height:72px;overflow:hidden">${esc(ct.texto.slice(0,220))}…</div>
+      <div class="flex mt" style="flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="contratoForm('${ct.id}')">Editar</button>
+        <button class="btn btn-gold btn-sm" onclick="genContrato('${ct.id}')">${icon('print')} Gerar PDF</button>
+        <button class="btn btn-danger btn-sm" onclick="askDelContrato('${ct.id}')">${icon('trash')} Excluir</button>
+      </div>
+    </div>`).join('')||`<div class="empty" style="grid-column:1/-1"><div class="e-ico">📝</div>Nenhum modelo de contrato.</div>`}
+  </div>`;
+function contratoForm(id){
+  const ct = id ? DB.contratos.find(x=>x.id===id) : {titulo:'Novo contrato', texto:PRE_CONTRATO};
+  openDrawer(`
+    <div class="drawer-head"><h3>${id?'Editar':'Novo'} contrato</h3><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="field"><label>Título do modelo</label><input id="ct_titulo" value="${esc(ct.titulo)}"></div>
+      <div class="field"><label>Texto do contrato</label><textarea id="ct_texto" rows="20" style="font-size:12.5px;line-height:1.6">${esc(ct.texto)}</textarea></div>
+      <div class="muted" style="font-size:12px">Campos automáticos disponíveis: {{CONTRATANTE}}, {{CPF_CNPJ}}, {{TELEFONE}}, {{TIPO_EVENTO}}, {{DATA_EVENTO}}, {{HORARIO}}, {{LOCAL_EVENTO}}, {{CONVIDADOS}}, {{CARDAPIO}}, {{VALOR_TOTAL}}, {{SINAL}}, {{FORMA_PAGAMENTO}}, {{CIDADE_DATA}}</div>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-primary" onclick="saveContrato('${id||''}')">${icon('check')} Salvar contrato</button></div>`);
+}
+function saveContrato(id){
+  const titulo=document.getElementById('ct_titulo').value.trim();
+  const texto=document.getElementById('ct_texto').value;
+  if(!titulo||!texto.trim()){ toast('Informe título e texto.'); return; }
+  if(id){ const ct=DB.contratos.find(x=>x.id===id); ct.titulo=titulo; ct.texto=texto; }
+  else DB.contratos.push({id:uid(), titulo, texto, criado:todayISO()});
+  save(); closeDrawer(); render(); toast('Contrato salvo.');
+}
+function askDelContrato(id){
+  const ct=DB.contratos.find(x=>x.id===id); if(!ct)return;
+  confirmDel(`Excluir o modelo de contrato <b>${esc(ct.titulo)}</b>?`, ()=>{
+    DB.contratos=DB.contratos.filter(x=>x.id!==id); save(); closeDrawer(); render(); toast('Contrato excluído.');
+  });
+}
+function genContrato(id){
+  const ct=DB.contratos.find(x=>x.id===id); if(!ct)return;
+  openDrawer(`
+    <div class="drawer-head"><h3>Gerar contrato em PDF</h3><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="muted mb">Escolha o orçamento para preencher automaticamente os dados do contratante, evento e valores.</div>
+      <div class="field"><label>Orçamento vinculado</label>
+        <select id="gc_budget">
+          <option value="">— Gerar em branco (preencher à mão) —</option>
+          ${DB.budgets.map(b=>{const cli=DB.clients.find(x=>x.id===b.clienteId);return `<option value="${b.id}">${esc(cli?cli.nome:'?')} · ${esc(b.tipo)} · ${fmtD(b.data)}</option>`}).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-gold" onclick="printContrato('${ct.id}', document.getElementById('gc_budget').value)">${icon('print')} Gerar PDF</button></div>`);
+}
+function printContrato(ctId, budgetId){
+  const ct=DB.contratos.find(x=>x.id===ctId); if(!ct)return;
+  let texto=ct.texto;
+  const hoje=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const vals={CONTRATANTE:'____________________________', CPF_CNPJ:'____________________', TELEFONE:'____________________', TIPO_EVENTO:'____________________', DATA_EVENTO:'____/____/______', HORARIO:'____:____', LOCAL_EVENTO:'____________________________', CONVIDADOS:'________', CARDAPIO:'____________________', VALOR_TOTAL:'R$ ____________', SINAL:'R$ ____________', FORMA_PAGAMENTO:'PIX ou cartão de crédito', CIDADE_DATA:'______________________, '+hoje};
+  if(budgetId){
+    const b=DB.budgets.find(x=>x.id===budgetId);
+    if(b){
+      const cli=DB.clients.find(x=>x.id===b.clienteId), c=calcBudget(b);
+      Object.assign(vals,{
+        CONTRATANTE:cli?cli.nome:vals.CONTRATANTE, CPF_CNPJ:cli&&cli.doc!=='—'?cli.doc:vals.CPF_CNPJ, TELEFONE:cli?cli.tel:vals.TELEFONE,
+        TIPO_EVENTO:b.tipo, DATA_EVENTO:fmtD(b.data), HORARIO:b.hora, LOCAL_EVENTO:b.local, CONVIDADOS:String(b.pessoas),
+        CARDAPIO:DB.menus.find(m=>m.id===b.menuId)?.nome||'—', VALOR_TOTAL:fmt(c.preco), SINAL:fmt(c.preco*DB.cfg.sinalPct/100)+` (${DB.cfg.sinalPct}%)`,
+        FORMA_PAGAMENTO:b.pagamento, CIDADE_DATA:'______________________, '+hoje
+      });
+    }
+  }
+  Object.entries(vals).forEach(([k,v])=>{ texto=texto.split('{{'+k+'}}').join(v); });
+  const docHtml = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${esc(ct.titulo)} · Gomes Buffet</title>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Marcellus&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4;margin:18mm 16mm}
+    body{font-family:'Poppins',sans-serif;color:#2E3B2E;font-size:12.5px;line-height:1.8}
+    .ct-head{text-align:center;margin-bottom:10mm}
+    .ct-logo{width:92px;height:92px;margin:0 auto 4mm}
+    .ct-title{font-family:'Marcellus',serif;font-size:19px;color:#1B4332;letter-spacing:1px}
+    .ct-rule{width:60mm;height:2px;background:#C9A227;margin:5mm auto 0}
+    .ct-body{white-space:pre-wrap;text-align:justify}
+    .ct-sign{margin-top:22mm;display:flex;justify-content:space-between;gap:14mm}
+    .ct-sign div{flex:1;text-align:center;font-size:12px}
+    .ct-sign div::before{content:'';display:block;border-top:1.2px solid #2E3B2E;margin-bottom:3mm}
+  </style></head>
+  <body>
+    <div class="ct-head"><div class="ct-logo">${LOGO_SVG}</div><div class="ct-title">${esc(ct.titulo).toUpperCase()}</div><div class="ct-rule"></div></div>
+    <div class="ct-body">${esc(texto)}</div>
+    <div class="ct-sign">
+      <div>CONTRATANTE</div>
+      <div>GOMES BUFFET<br>Contratada</div>
+    </div>
+  </body></html>`;
+  closeDrawer();
+  openPreview(docHtml, 'Contrato — '+ct.titulo);
+}
+
 /* ================== CONFIG: ESTIMATIVAS & PREÇOS ================== */
 PAGES.config = () => {
   const cats=[...new Set(DB.ingredients.map(i=>i.cat))];
@@ -1355,9 +1811,10 @@ PAGES.config = () => {
   <div class="grid g2 mb">
     <div class="card card-pad">
       <div class="section-title" style="margin-top:0">Parâmetros comerciais</div>
-      <div class="frow">
+      <div class="frow3">
         <div class="field"><label>Margem padrão (%)</label><input type="number" min="5" max="70" value="${DB.cfg.margemPadrao}" onchange="DB.cfg.margemPadrao=+this.value||30;save();toast('Margem padrão atualizada.')"></div>
         <div class="field"><label>Sinal na aprovação (%)</label><input type="number" min="0" max="100" value="${DB.cfg.sinalPct}" onchange="DB.cfg.sinalPct=+this.value||50;save();toast('Percentual de sinal atualizado.')"></div>
+        <div class="field"><label>Cidade/UF (pesquisa de preços)</label><input value="${esc(DB.cfg.regiao||'')}" placeholder="Ex.: Serra ES" onchange="DB.cfg.regiao=this.value.trim();save();toast('Região salva.')"></div>
       </div>
     </div>
     <div class="card card-pad">
@@ -1366,10 +1823,22 @@ PAGES.config = () => {
       <button class="btn btn-gold btn-sm mt" onclick="toast('Integração de pesquisa online será ativada na versão completa (API).')">${icon('search')} Pesquisar preços online</button>
     </div>
   </div>
+  <div class="card card-pad mb">
+    <div class="section-title" style="margin-top:0">Dados da empresa (usados na proposta em PDF)</div>
+    <div class="frow">
+      <div class="field"><label>Instagram</label><input value="${esc(DB.cfg.empresa.instagram)}" onchange="cfgEmp('instagram',this.value)"></div>
+      <div class="field"><label>Telefone</label><input value="${esc(DB.cfg.empresa.telefone)}" onchange="cfgEmp('telefone',this.value)"></div>
+    </div>
+    <div class="field"><label>Sobre nós</label><textarea rows="3" onchange="cfgEmp('sobre',this.value)">${esc(DB.cfg.empresa.sobre)}</textarea></div>
+    <div class="field"><label>Nosso Buffet</label><textarea rows="2" onchange="cfgEmp('nossoBuffet',this.value)">${esc(DB.cfg.empresa.nossoBuffet)}</textarea></div>
+    <div class="field"><label>Incluso no investimento</label><textarea rows="2" onchange="cfgEmp('incluso',this.value)">${esc(DB.cfg.empresa.incluso)}</textarea></div>
+    <div class="field"><label>Informações adicionais (uma por linha)</label><textarea rows="5" onchange="cfgEmp('infoAdicionais',this.value)">${esc(DB.cfg.empresa.infoAdicionais)}</textarea></div>
+    <div class="field"><label>Frase de fechamento</label><textarea rows="2" onchange="cfgEmp('fechamento',this.value)">${esc(DB.cfg.empresa.fechamento)}</textarea></div>
+  </div>
   <div class="card">
     <div class="card-head"><h3>Estimativa por convidado — base de ingredientes</h3><span class="muted">Tudo configurável · usado no cálculo automático dos orçamentos</span></div>
-    <table><thead><tr><th>Ingrediente</th><th class="right">Qtd / pessoa</th><th>Un</th><th class="right">Preço mín</th><th class="right">Preço médio</th><th class="right">Preço máx</th></tr></thead><tbody>
-    ${cats.map(cat=>`<tr style="cursor:default;background:var(--surface-2)"><td colspan="6" style="font-weight:800;font-size:11.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--primary);padding:8px 14px">${cat}</td></tr>`+
+    <table><thead><tr><th>Ingrediente</th><th class="right">Qtd / pessoa</th><th>Un</th><th class="right">Preço mín</th><th class="right">Preço médio</th><th class="right">Preço máx</th><th class="right">Ações</th></tr></thead><tbody>
+    ${cats.map(cat=>`<tr style="cursor:default;background:var(--surface-2)"><td colspan="7" style="font-weight:800;font-size:11.5px;letter-spacing:.6px;text-transform:uppercase;color:var(--primary);padding:8px 14px">${cat}</td></tr>`+
       DB.ingredients.filter(i=>i.cat===cat).map(i=>`<tr style="cursor:default">
       <td>${esc(i.nome)}</td>
       <td class="right"><input class="qty-input" type="number" step="0.01" min="0" value="${i.pp}" onchange="cfgIng('${i.id}','pp',this.value)"></td>
@@ -1377,9 +1846,52 @@ PAGES.config = () => {
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMin}" onchange="cfgIng('${i.id}','pMin',this.value)"></td>
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMed}" onchange="cfgIng('${i.id}','pMed',this.value)"></td>
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMax}" onchange="cfgIng('${i.id}','pMax',this.value)"></td>
-    </tr>`).join('')).join('')}</tbody></table></div>`;
+      <td class="right"><div class="flex" style="justify-content:flex-end">
+        <button class="icon-btn" style="width:30px;height:30px" title="Pesquisar preço na internet (sua região)" onclick="priceSearch('${i.id}')">${icon('search')}</button>
+        <button class="icon-btn" style="width:30px;height:30px" title="Excluir ingrediente" onclick="askDelIngrediente('${i.id}')">${icon('trash')}</button>
+      </div></td>
+    </tr>`).join('')).join('')}</tbody></table>
+    <div style="padding:14px 20px;border-top:1px solid var(--border)">
+      <div class="section-title" style="margin-top:0">Adicionar ingrediente à base</div>
+      <div class="frow3">
+        <div class="field"><label>Nome</label><input id="ni_nome" placeholder="Ex.: Queijo coalho"></div>
+        <div class="field"><label>Unidade</label><input id="ni_un" value="kg" list="unidades"><datalist id="unidades"><option>kg</option><option>un</option><option>L</option><option>kit</option></datalist></div>
+        <div class="field"><label>Categoria</label><input id="ni_cat" list="cats_ing" placeholder="Ex.: Carnes"><datalist id="cats_ing">${cats.map(cItem=>`<option>${esc(cItem)}</option>`).join('')}</datalist></div>
+      </div>
+      <div class="frow3">
+        <div class="field"><label>Qtd / pessoa</label><input id="ni_pp" type="number" step="0.01" min="0" placeholder="0.10"></div>
+        <div class="field"><label>Preço mín (R$)</label><input id="ni_pmin" type="number" step="0.1" min="0"></div>
+        <div class="field"><label>Preço médio / máx (R$)</label><div class="flex"><input id="ni_pmed" type="number" step="0.1" min="0" placeholder="médio"><input id="ni_pmax" type="number" step="0.1" min="0" placeholder="máx"></div></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addIngrediente()">${icon('plus')} Adicionar ingrediente</button>
+    </div></div>`;
 };
+function priceSearch(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  const q=encodeURIComponent('preço '+i.nome+' '+(i.un==='kg'?'kg ':'')+(DB.cfg.regiao||''));
+  window.open('https://www.google.com/search?tbm=shop&q='+q, '_blank');
+  toast('Pesquisa aberta em nova aba — confira os preços da sua região e atualize os valores aqui.');
+}
+function addIngrediente(){
+  const g=x=>document.getElementById(x).value;
+  const nome=g('ni_nome').trim(), un=g('ni_un').trim()||'un', cat=g('ni_cat').trim()||'Outros';
+  const pp=+g('ni_pp')||0, pMin=+g('ni_pmin')||0, pMed=+g('ni_pmed')||0, pMax=+g('ni_pmax')||0;
+  if(!nome){ toast('Informe o nome do ingrediente.'); return; }
+  if(!pp){ toast('Informe a quantidade por pessoa.'); return; }
+  DB.ingredients.push({id:uid(), nome, un, pp, pMin:pMin||pMed, pMed:pMed||pMin, pMax:pMax||pMed||pMin, cat});
+  save(); render(); toast('Ingrediente adicionado à base de estimativas.');
+}
+function askDelIngrediente(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  const emMenus=DB.menus.filter(m=>m.itens.includes(id)).length;
+  confirmDel(`Excluir <b>${esc(i.nome)}</b> da base de estimativas?${emMenus?` Ele será removido de ${emMenus} cardápio(s).`:''}`, ()=>{
+    DB.ingredients=DB.ingredients.filter(x=>x.id!==id);
+    DB.menus.forEach(m=>{ m.itens=m.itens.filter(x=>x!==id); });
+    save(); closeDrawer(); render(); toast('Ingrediente excluído.');
+  });
+}
 function cfgIng(id,campo,val){ const i=DB.ingredients.find(x=>x.id===id); if(!i)return; i[campo]=+val||0; save(); toast('Base de estimativa atualizada.'); }
+function cfgEmp(campo,val){ DB.cfg.empresa[campo]=val; save(); toast('Dados da empresa atualizados.'); }
 
 /* ================== MINHA CONTA (self-service, qualquer usuário) ================== */
 PAGES.conta = () => {
@@ -1388,9 +1900,11 @@ PAGES.conta = () => {
   <div class="grid g2">
     <div class="card card-pad">
       <div class="section-title" style="margin-top:0">Meus dados</div>
-      <div class="sumrow"><span>Nome</span><b>${esc(u.nome)}</b></div>
-      <div class="sumrow"><span>Usuário</span><b>@${esc(u.usuario)}</b></div>
+      ${acctMsg?`<div class="login-ok">${esc(acctMsg)}</div>`:''}
+      <div class="field"><label>Nome completo</label><input id="ac_nome" value="${esc(u.nome)}"></div>
+      <div class="field"><label>Usuário (login)</label><input id="ac_usuario" value="${esc(u.usuario)}"></div>
       <div class="sumrow"><span>Perfil</span><b>${esc(u.papel)}</b></div>
+      <button class="btn btn-ghost" onclick="saveMyData()">${icon('edit')} Salvar dados</button>
 
       <div class="section-title">Alterar senha</div>
       <div id="acctPassMsg"></div>
@@ -1411,6 +1925,17 @@ PAGES.conta = () => {
     </div>
   </div>`;
 };
+function saveMyData(){
+  const nome=document.getElementById('ac_nome').value.trim();
+  const usuario=document.getElementById('ac_usuario').value.trim();
+  if(!nome||!usuario){ toast('Nome e usuário não podem ficar em branco.'); return; }
+  const dup=DB.users.find(x=>x.usuario.toLowerCase()===usuario.toLowerCase() && x.id!==SESSION.id);
+  if(dup){ toast('Já existe outro usuário com esse login.'); return; }
+  SESSION.nome=nome; SESSION.usuario=usuario; save();
+  acctMsg='Dados atualizados com sucesso.';
+  toast('Seus dados foram atualizados.');
+  render();
+}
 function saveMyPassword(){
   const atual=document.getElementById('ac_atual').value;
   const n1=document.getElementById('ac_nova1').value, n2=document.getElementById('ac_nova2').value;
@@ -1450,12 +1975,41 @@ PAGES.usuarios = () => {
       <td><span class="badge ${u.papel==='Administrador'?'b-gold':'b-blue'}">${esc(u.papel)}</span></td>
       <td class="right">${qtd}</td>
       <td class="right"><div class="flex" style="justify-content:flex-end">
+        <button class="btn btn-gold btn-sm" onclick="resetPasswordForm('${u.id}')">${icon('lock')} Redefinir senha</button>
         <button class="btn btn-ghost btn-sm" onclick="userForm('${u.id}')">Editar</button>
         <button class="icon-btn" style="width:30px;height:30px" title="Excluir usuário" onclick="askDelUser('${u.id}')">${icon('trash')}</button>
       </div></td>
     </tr>`}).join('')}
   </tbody></table></div>`;
 };
+function resetPasswordForm(id){
+  if(!isAdmin()){ toast('Apenas administradores podem redefinir senhas.'); return; }
+  const u=DB.users.find(x=>x.id===id); if(!u)return;
+  openDrawer(`
+    <div class="drawer-head"><h3>Redefinir senha</h3><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="flex mb"><span class="avatar-sm" style="width:38px;height:38px;font-size:13px">${initials(u.nome)}</span>
+      <div><b>${esc(u.nome)}</b><div class="muted">@${esc(u.usuario)} · ${esc(u.papel)}</div></div></div>
+      <div id="rpMsg"></div>
+      <div class="frow">
+        <div class="field"><label>Nova senha</label><input id="rp_nova1" type="password" placeholder="mínimo 4 caracteres"></div>
+        <div class="field"><label>Confirmar nova senha</label><input id="rp_nova2" type="password" placeholder="repita a senha" onkeydown="if(event.key==='Enter')adminResetPassword('${u.id}')"></div>
+      </div>
+      <div class="muted" style="font-size:12px">Como administrador, você pode redefinir a senha de qualquer usuário diretamente, sem precisar da pergunta de segurança dele.</div>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-primary" onclick="adminResetPassword('${u.id}')">${icon('lock')} Salvar nova senha</button></div>`);
+}
+function adminResetPassword(id){
+  if(!isAdmin()){ toast('Apenas administradores podem redefinir senhas.'); return; }
+  const u=DB.users.find(x=>x.id===id); if(!u)return;
+  const msg=document.getElementById('rpMsg');
+  const n1=document.getElementById('rp_nova1').value, n2=document.getElementById('rp_nova2').value;
+  if(n1.length<4){ msg.innerHTML=`<div class="login-err">A nova senha deve ter ao menos 4 caracteres.</div>`; return; }
+  if(n1!==n2){ msg.innerHTML=`<div class="login-err">As senhas não coincidem.</div>`; return; }
+  u.senha=n1; if(SESSION.id===u.id) SESSION=u;
+  save(); closeDrawer(); render();
+  toast(`Senha de ${u.nome} redefinida com sucesso.`);
+}
 function userForm(id){
   if(!isAdmin()){ toast('Apenas administradores podem cadastrar usuários.'); return; }
   const u = id?DB.users.find(x=>x.id===id):{nome:'',usuario:'',senha:'',papel:'Comercial',perguntaSeg:'',respostaSeg:''};
