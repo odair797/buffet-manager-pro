@@ -1970,6 +1970,14 @@ function renderPuxa(){
         <input id="px_termo" value="${esc(PUXA.termo)}" placeholder="O que buscar (ex.: picanha, alcatra)" onkeydown="if(event.key==='Enter'){PUXA.termo=this.value;buscarPreco()}">
         <button class="btn btn-primary btn-sm" onclick="PUXA.termo=document.getElementById('px_termo').value;buscarPreco()">${icon('search')} Buscar</button>
       </div>
+      <div class="alert-row mb" style="border-color:var(--gold)">
+        <span class="a-ico">🔒</span>
+        <div style="flex:1">
+          <b>Preços oficiais do ES (Grande Vitória)</b> — a base do Espírito Santo é o app do governo <b>Menor Preço Brasil</b> e exige login gov.br, então abre em outra janela para você entrar e consultar.
+          <button class="btn btn-gold btn-sm mt" onclick="abrirPrecoGov()">${icon('search')} Abrir site oficial do governo (login gov.br)</button>
+          <div class="muted mt" style="font-size:11px">Faça login, veja o preço da sua região e digite no campo <b>Médio</b> abaixo.</div>
+        </div>
+      </div>
       ${PUXA.carregando?'<div class="empty" style="padding:24px">Consultando a base de preços…</div>':''}
       ${PUXA.erro?`<div class="login-err">${esc(PUXA.erro)}</div><div class="muted" style="font-size:12px">Dica: use o botão de lupa para consultar o Google Shopping da sua região, ou registre o preço pago em "Média".</div>`:''}
       ${d&&d.precos&&d.precos.n?`
@@ -1988,6 +1996,10 @@ function renderPuxa(){
     </div>
     <div class="drawer-foot"><button class="btn btn-ghost" onclick="closeDrawer()">Fechar</button></div>`);
   const inp=document.getElementById('px_termo'); if(inp && !PUXA.carregando){ inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); }
+}
+function abrirPrecoGov(){
+  window.open('https://sefaz.es.gov.br/menor-preco-brasil-passa-ser-unico-aplicativo', '_blank');
+  toast('Site oficial aberto. Faça login gov.br, consulte o preço da sua região e traga para o campo Médio.');
 }
 async function buscarPreco(){
   if(!PUXA.termo || !PUXA.termo.trim()){ toast('Digite o que buscar.'); return; }
