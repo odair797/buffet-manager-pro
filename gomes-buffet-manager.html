@@ -452,6 +452,7 @@ if(!DB.cfg.empresa) DB.cfg.empresa={
   telefone:'(27) 99625-4493'
 };
 if(DB.cfg.regiao==null) DB.cfg.regiao='';
+(DB.ingredients||[]).forEach(i=>{ if(!i.hist) i.hist=[]; });
 (DB.menus||[]).forEach(m=>{
   if(!m.pratos) m.pratos=[]; // migração p/ cardápios salvos antes dos pratos existirem
   if(!m.secoesList){ // migração p/ seções dinâmicas
@@ -825,6 +826,7 @@ function startWizard(b){
 function wStep(n){
   if(n>=2) syncStep1();
   if(W.step===1 && n>1){
+    if(!W.b.clienteNome && !W.b.clienteId){ toast('Informe o nome do cliente.'); return; }
     if(!W.b.local){ toast('Informe o local do evento.'); return; }
   }
   W.step=n; render();
@@ -834,7 +836,11 @@ function syncStep1(){
   const g=id=>document.getElementById(id);
   if(!g('w_cli')) return;
   const b=W.b, oldMenu=b.menuId, oldP=b.pessoas;
-  b.clienteId=g('w_cli').value; b.tipo=g('w_tipo').value; b.pessoas=+g('w_pess').value||1;
+  const nomeCli=g('w_cli').value.trim();
+  b.clienteNome=nomeCli;
+  const achou=DB.clients.find(x=>x.nome.toLowerCase()===nomeCli.toLowerCase());
+  b.clienteId=achou?achou.id:null;
+  b.tipo=g('w_tipo').value; b.pessoas=+g('w_pess').value||1;
   b.data=g('w_data').value||todayISO(); b.hora=g('w_hora').value||'12:00'; b.local=g('w_local').value.trim();
   b.menuId=g('w_menu').value; b.contratoId=g('w_contrato')?g('w_contrato').value:b.contratoId; b.pagamento=g('w_pag').value; b.validade=g('w_val').value; b.obs=g('w_obs').value;
   if(b.menuId!==oldMenu){ const m=DB.menus.find(x=>x.id===b.menuId); b.itens=m?m.itens.map(i=>({ing:i})):[]; }
@@ -849,7 +855,7 @@ function wizardView(){
   if(W.step===1){
     body=`<div class="card card-pad">
       <div class="frow">
-        <div class="field"><label>Cliente</label><select id="w_cli">${DB.clients.map(x=>`<option value="${x.id}" ${x.id===b.clienteId?'selected':''}>${esc(x.nome)}</option>`).join('')}</select></div>
+        <div class="field"><label>Cliente (escolha um existente ou digite um novo)</label><input id="w_cli" list="clientesList" autocomplete="off" placeholder="Nome do cliente" value="${esc((DB.clients.find(x=>x.id===b.clienteId)||{}).nome || b.clienteNome || '')}"><datalist id="clientesList">${DB.clients.map(x=>`<option value="${esc(x.nome)}">`).join('')}</datalist></div>
         <div class="field"><label>Tipo de evento</label><input id="w_tipo" value="${esc(b.tipo)}" list="tipos"><datalist id="tipos"><option>Aniversário</option><option>Casamento</option><option>Confraternização empresa</option><option>Formatura</option><option>Batizado</option><option>Quermesse</option></datalist></div>
       </div>
       <div class="frow3">
@@ -914,10 +920,12 @@ function wizardView(){
   }
   if(W.step===4){
     const cli=DB.clients.find(x=>x.id===b.clienteId);
+    const nomeClienteResumo = cli ? cli.nome : (b.clienteNome || '—');
+    const clienteNovo = !cli && b.clienteNome;
     body=`<div class="grid g2">
       <div class="card card-pad">
         <div class="section-title" style="margin-top:0">Resumo da proposta</div>
-        <div class="sumrow"><span>Cliente</span><b>${esc(cli?cli.nome:'—')}</b></div>
+        <div class="sumrow"><span>Cliente</span><b>${esc(nomeClienteResumo)}${clienteNovo?' <span class="badge b-gold" style="font-size:10px">novo — será criado</span>':''}</b></div>
         <div class="sumrow"><span>Evento</span><b>${esc(b.tipo)} · ${b.pessoas} convidados</b></div>
         <div class="sumrow"><span>Data</span><b>${fmtD(b.data)} às ${b.hora}</b></div>
         <div class="sumrow"><span>Local</span><b style="text-align:right;max-width:60%">${esc(b.local)}</b></div>
@@ -979,7 +987,14 @@ function wToggleTeam(id){ const e=W.b.equipe||(W.b.equipe=[]); const i=e.indexOf
 function wSetRental(id,qtd){ qtd=+qtd||0; const a=W.b.alugueis||(W.b.alugueis=[]); const i=a.findIndex(x=>x.id===id);
   if(qtd<=0){ if(i>=0)a.splice(i,1); } else if(i>=0){ a[i].qtd=qtd; } else a.push({id,qtd}); render(); }
 function saveBudget(status){
-  const b=W.b; b.status=status;
+  const b=W.b;
+  if(!b.clienteId && b.clienteNome){
+    const jaExiste=DB.clients.find(x=>x.nome.toLowerCase()===b.clienteNome.toLowerCase());
+    if(jaExiste){ b.clienteId=jaExiste.id; }
+    else{ const novo={id:uid(), nome:b.clienteNome, tel:'', email:'', doc:'', end:'', obs:'Cliente criado automaticamente pelo orçamento — completar os dados.'}; DB.clients.push(novo); b.clienteId=novo.id; }
+  }
+  if(!b.clienteId){ toast('Informe o nome do cliente.'); return; }
+  b.status=status;
   if(!b.criadoPor && SESSION) b.criadoPor={id:SESSION.id, nome:SESSION.nome};
   const i=DB.budgets.findIndex(x=>x.id===b.id);
   if(i>=0) DB.budgets[i]=b; else DB.budgets.push(b);
@@ -1863,6 +1878,7 @@ PAGES.config = () => {
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMed}" onchange="cfgIng('${i.id}','pMed',this.value)"></td>
       <td class="right"><input class="qty-input" type="number" step="0.1" min="0" value="${i.pMax}" onchange="cfgIng('${i.id}','pMax',this.value)"></td>
       <td class="right"><div class="flex" style="justify-content:flex-end">
+        <button class="btn btn-gold btn-sm" style="padding:5px 9px" title="Registrar preço pago e aplicar a média das suas compras" onclick="histPreco('${i.id}')">${icon('money')} Média${i.hist&&i.hist.length?` (${i.hist.length})`:''}</button>
         <button class="icon-btn" style="width:30px;height:30px" title="Pesquisar preço na internet (sua região)" onclick="priceSearch('${i.id}')">${icon('search')}</button>
         <button class="icon-btn" style="width:30px;height:30px" title="Excluir ingrediente" onclick="askDelIngrediente('${i.id}')">${icon('trash')}</button>
       </div></td>
@@ -1887,6 +1903,53 @@ function priceSearch(id){
   const q=encodeURIComponent('preço '+i.nome+' '+(i.un==='kg'?'kg ':'')+(DB.cfg.regiao||''));
   window.open('https://www.google.com/search?tbm=shop&q='+q, '_blank');
   toast('Pesquisa aberta em nova aba — confira os preços da sua região e atualize os valores aqui.');
+}
+function histStats(i){
+  const vals=(i.hist||[]).map(h=>h.v).filter(v=>v>0);
+  if(!vals.length) return null;
+  const min=Math.min(...vals), max=Math.max(...vals), med=vals.reduce((s,v)=>s+v,0)/vals.length;
+  return {min:+min.toFixed(2), max:+max.toFixed(2), med:+med.toFixed(2), n:vals.length};
+}
+function histPreco(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  if(!i.hist) i.hist=[];
+  const st=histStats(i);
+  openDrawer(`
+    <div class="drawer-head"><div><h3>Preços pagos — ${esc(i.nome)}</h3><div class="muted">Registre o que você pagou; o sistema calcula a média sozinho</div></div><button class="close-x" onclick="closeDrawer()">✕</button></div>
+    <div class="drawer-body">
+      <div class="muted mb" style="font-size:12.5px">A cada compra, registre o preço pago (por ${i.un}). Quanto mais registros, mais precisa fica a média — que reflete o SEU custo real, não a internet.</div>
+      ${st?`<div class="total-box"><div class="spread"><div><div class="tb-l">Preço médio das suas compras</div><div class="tb-v">${fmt(st.med)}</div></div>
+        <div style="text-align:right;font-size:13px"><div>mín ${fmt(st.min)}</div><div>máx ${fmt(st.max)}</div><div class="muted">${st.n} registro(s)</div></div></div></div>
+        <button class="btn btn-gold mt" style="width:100%;justify-content:center" onclick="aplicarMedia('${i.id}')">${icon('check')} Aplicar à base (mín ${fmt(st.min)} · méd ${fmt(st.med)} · máx ${fmt(st.max)})</button>`
+        :'<div class="empty" style="padding:20px">Nenhum preço pago registrado ainda.</div>'}
+      <div class="section-title">Preços registrados</div>
+      ${(i.hist||[]).map((h,hi)=>`<div class="checklist-item"><span><b>${fmt(h.v)}</b> <span class="muted">/${i.un} · ${fmtD(h.d)}${h.local?' · '+esc(h.local):''}</span></span><button class="checklist-del" title="Remover" onclick="delHistPreco('${i.id}',${hi})">${icon('trash')}</button></div>`).join('')||'<div class="muted" style="font-size:12.5px">—</div>'}
+      <div class="frow mt">
+        <input id="hp_valor" type="number" step="0.1" min="0" placeholder="Preço pago (R$/${i.un})">
+        <input id="hp_local" placeholder="Loja/fornecedor (opcional)">
+      </div>
+      <button class="btn btn-primary btn-sm mt" onclick="addHistPreco('${i.id}')">${icon('plus')} Registrar preço pago</button>
+    </div>
+    <div class="drawer-foot"><button class="btn btn-ghost" onclick="closeDrawer()">Fechar</button></div>`);
+}
+function addHistPreco(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  const v=+document.getElementById('hp_valor').value;
+  if(!v){ toast('Informe o preço pago.'); return; }
+  const local=document.getElementById('hp_local').value.trim();
+  if(!i.hist) i.hist=[];
+  i.hist.push({v, d:todayISO(), local});
+  save(); histPreco(id); toast('Preço registrado.');
+}
+function delHistPreco(id, hi){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  i.hist.splice(hi,1); save(); histPreco(id);
+}
+function aplicarMedia(id){
+  const i=DB.ingredients.find(x=>x.id===id); if(!i)return;
+  const st=histStats(i); if(!st){ toast('Registre ao menos um preço.'); return; }
+  i.pMin=st.min; i.pMed=st.med; i.pMax=st.max;
+  save(); closeDrawer(); render(); toast(`${i.nome}: preços atualizados pela média das suas compras.`);
 }
 function addIngrediente(){
   const g=x=>document.getElementById(x).value;
