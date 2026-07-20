@@ -1539,7 +1539,12 @@ function dishForm(id){
       </div>
       <div class="section-title">Investimento (tabela de preços da proposta)</div>
       <div class="field"><label>Descrição do serviço</label><input value="${esc(m.horas||'')}" onchange="cfgMenu('${m.id}','horas',this.value)" placeholder="Ex.: 4 horas de serviço de buffet"></div>
-      ${(m.precos||[]).map((p,pi)=>`<div class="checklist-item"><span><b>${esc(p.faixa)}</b> — <span class="muted">${fmt(p.valor)} por pessoa</span></span><button class="checklist-del" onclick="removePreco('${m.id}',${pi})">${icon('trash')}</button></div>`).join('')||'<div class="muted" style="font-size:12.5px">Nenhuma faixa cadastrada. Ex.: "De 15 a 29 adultos" — R$ 155.</div>'}
+      <div class="muted mb" style="font-size:12px">Edite a faixa e o valor direto abaixo. Use a lixeira para excluir e o botão para incluir novas faixas.</div>
+      ${(m.precos||[]).map((p,pi)=>`<div class="flex" style="gap:8px;margin-bottom:8px">
+        <input value="${esc(p.faixa)}" onchange="cfgPreco('${m.id}',${pi},'faixa',this.value)" placeholder="Faixa (ex.: De 15 a 29 Adultos)" style="flex:2">
+        <input type="number" min="0" step="5" value="${p.valor}" onchange="cfgPreco('${m.id}',${pi},'valor',this.value)" placeholder="R$/pessoa" style="flex:1;max-width:120px">
+        <button class="icon-btn" style="width:34px;height:34px;flex-shrink:0" title="Excluir faixa" onclick="removePreco('${m.id}',${pi})">${icon('trash')}</button>
+      </div>`).join('')||'<div class="muted" style="font-size:12.5px">Nenhuma faixa cadastrada. Ex.: "De 15 a 29 adultos" — R$ 155.</div>'}
       <div class="frow mt">
         <input id="np_faixa" placeholder="Faixa (ex.: De 15 a 29 Adultos)">
         <input id="np_valor" type="number" min="0" step="5" placeholder="Valor por pessoa (R$)">
@@ -1584,14 +1589,25 @@ function addPreco(menuId){
   m.precos.push({faixa, valor}); save(); dishForm(menuId);
 }
 function removePreco(menuId, pi){ const m=DB.menus.find(x=>x.id===menuId); if(!m)return; m.precos.splice(pi,1); save(); dishForm(menuId); }
+function cfgPreco(menuId, pi, campo, val){
+  const m=DB.menus.find(x=>x.id===menuId); if(!m||!m.precos[pi])return;
+  m.precos[pi][campo] = campo==='valor' ? (+val||0) : val;
+  save(); toast('Preço atualizado.');
+}
 
 /* ================== PROPOSTA EM PDF (padrão visual Gomes Buffet — capa, sobre, menu, investimento, infos, contato) ================== */
 const BRAND_MARK = `<div class="gb-pill"><span class="gb-p1">Gomes</span><span class="gb-p2">Buffet</span></div>`;
+const FOTO_CAPA_PADRAO = 'assets/capa.jpg';
+const FOTOS_MENU_PADRAO = ['assets/menu1.jpg','assets/menu2.jpg','assets/capa.jpg'];
 function printMenu(id){
   const m=DB.menus.find(x=>x.id===id); if(!m)return;
   const emp=DB.cfg.empresa||{};
   const secoesAtivas=(m.secoesList||[]).filter(s=>s.ativo);
   const infoLinhas=(emp.infoAdicionais||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const capaImg = (m.fotoCapa && m.fotoCapa.trim()) ? m.fotoCapa.trim() : FOTO_CAPA_PADRAO;
+  const menuImgs = (m.fotosMenu && m.fotosMenu.trim())
+      ? m.fotosMenu.split(',').map(u=>u.trim()).filter(Boolean).slice(0,3)
+      : FOTOS_MENU_PADRAO;
   const docHtml = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Proposta ${esc(m.nome)} · Gomes Buffet</title>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&family=Marcellus&family=Italianno&display=swap" rel="stylesheet">
   <style>
@@ -1650,7 +1666,7 @@ function printMenu(id){
       </div>
       <div class="capa-sub">${esc(m.nome)}</div>
       <div class="capa-bemvindo">SEJA BEM-VINDO À</div>
-      ${m.fotoCapa?`<img class="capa-foto" src="${esc(m.fotoCapa)}" alt="">`:''}
+      <img class="capa-foto" src="${esc(capaImg)}" alt="" onerror="this.style.display='none'">
       <div class="wordmark"><span class="wm1">Gomes</span><span class="wm2">Buffet</span></div>
     </div></div>
 
@@ -1664,7 +1680,7 @@ function printMenu(id){
     <!-- MENU -->
     <div class="page pg-white"><div class="frame">
       <h1 class="serif">Menu ${esc(m.nome.toLowerCase())}</h1>
-      ${m.fotosMenu?`<div class="fotos-menu">${m.fotosMenu.split(',').map(u=>u.trim()).filter(Boolean).slice(0,3).map(u=>`<img src="${esc(u)}" alt="">`).join('')}</div>`:''}
+      ${menuImgs.length?`<div class="fotos-menu">${menuImgs.map(u=>`<img src="${esc(u)}" alt="" onerror="this.style.display='none'">`).join('')}</div>`:''}
       ${secoesAtivas.map(sec=>{
         const itens=(m.pratos||[]).filter(p=>p.cat===sec.nome);
         if(!itens.length) return '';
